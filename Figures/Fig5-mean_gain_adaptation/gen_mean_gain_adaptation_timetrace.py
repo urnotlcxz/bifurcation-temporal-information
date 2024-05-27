@@ -24,11 +24,11 @@ SAVE = False
 
 from models import *
 
-a = ORN_model(dt=0.05, N=N, odor_tau=0.5, odor_mu=0, odor_sigma=0, 
+a = ORN_model_Ca(dt=0.1, N=N, odor_tau=0.5, odor_mu=0, odor_sigma=0, 
                     rate_sigma=0, k_rate=1/10)
 
 a.stim = data[:,1]
-a.integrate([-63, 0, 0, 0])
+a.integrate()
 a.calc_rate()
 
 if SAVE:
