@@ -45,7 +45,7 @@ def gen_fig(_w, _h):
     return fig, ax
 
 
-#%% Fig 1B
+#%% Fig 1C
 
 dose_resp_x = []
 dose_resp_y = []
@@ -148,7 +148,7 @@ for i in range(len(amps)):
         bin_arrs.append(a.bin_arr)
 
 
-#%% Fig 1C
+#%% Fig 1D
 
 mn = 8
 amp = 6
@@ -219,41 +219,6 @@ if SAVEFIG:
 plt.show()
 
 
-#%% Fig 1D
-
-colors = ['dodgerblue', 'k', 'orangered']
-lss =['-', '-', '-']
-fig, ax = gen_fig(fig_w, fig_h)
-for i in range(nums):
-    ax.plot(Tts[i], stims[i], color=colors[i], ls='-', lw=1)
-    plt.xticks(fontsize=7)
-    plt.yticks([0, 5, 10], fontsize=7)
-    plt.xlim(min_x, max_x)
-    plt.ylim(0, 15)
-    plt.axhline(4.54, color='k', ls='--', lw=0.5)
-if SAVEFIG:
-    save_fig('compare_stims', tight_layout=False)
-plt.show()
-    
-fig, ax = gen_fig(fig_w, fig_h)
-for i in range(nums):
-    plt.plot(Tts[i], xs[i], color=colors[i], ls='-', lw=1)
-    plt.xticks(fontsize=7)
-    plt.yticks(fontsize=7)
-    plt.xlim(min_x, max_x)
-if SAVEFIG:
-    save_fig('compare_vs', tight_layout=False)
-plt.show()
-    
-fig, ax = gen_fig(fig_w, fig_h)
-for i in range(nums):
-    plt.plot(Tts[i], rates[i], color=colors[i], ls=lss[i], lw=1)
-    plt.xticks(fontsize=7)
-    plt.yticks(fontsize=7)
-    plt.xlim(min_x, max_x)
-if SAVEFIG:
-    save_fig('compare_rates', tight_layout=False)
-plt.show()
 
 
 
