@@ -36,8 +36,6 @@ seed = 12345
 mus = np.linspace(4, 15, 10)
 sigmas = np.logspace(-2, 0.5, 10)
 
-seed = 12345
-
 mu_scaled = np.empty((len(mus), len(sigmas)))
 sigma_scaled = np.empty((len(mus), len(sigmas)))
 
