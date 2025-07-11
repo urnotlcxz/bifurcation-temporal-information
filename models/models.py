@@ -18,6 +18,159 @@ from scipy.interpolate import splrep, splev
 from utils import calc_MI_xy
 
 
+
+class SimplifiedLIFModel():
+    """
+    简化的LIF(Leaky Integrate-and-Fire)神经元模型
+    保留了分叉特性和均值适应能力
+    """
+    
+    def __init__(self, dt=0.1, N=1000000, odor_tau=200, odor_mu=4.53, odor_sigma=0.3,
+                 tau_m=10.0, R=1.0, V_th=-50.0, V_reset=-70.0, V_rest=-65.0,
+                 adaptation_strength=0.5, adaptation_tau=100.0, 
+                 k_rate=1./30, rate_sigma=0.5):
+        """
+        初始化LIF模型参数
+        
+        参数:
+        dt: 时间步长(ms)
+        N: 模拟步数
+        odor_tau: 气味信号时间常数(ms)
+        odor_mu: 气味信号均值
+        odor_sigma: 气味信号标准差
+        tau_m: 膜时间常数(ms)
+        R: 膜电阻
+        V_th: 发放阈值(mV)
+        V_reset: 重置电位(mV)
+        V_rest: 静息电位(mV)
+        adaptation_strength: 适应强度
+        adaptation_tau: 适应时间常数(ms)
+        k_rate: 发放率滤波参数
+        rate_sigma: 发放率噪声标准差
+        """
+        self.N = N
+        self.dt = dt
+        self.Tt = np.linspace(0, self.N*self.dt, self.N)
+        
+        # LIF模型参数
+        self.tau_m = tau_m        # 膜时间常数
+        self.R = R                # 膜电阻
+        self.V_th = V_th          # 发放阈值
+        self.V_reset = V_reset    # 重置电位
+        self.V_rest = V_rest      # 静息电位
+        
+        # 适应机制参数
+        self.adaptation_strength = adaptation_strength  # 适应强度
+        self.adaptation_tau = adaptation_tau            # 适应时间常数
+        self.adaptation_current = 0.0                   # 适应电流初始值
+        
+        # 输入信号参数
+        self.I_mu = odor_mu
+        self.I_sigma = odor_sigma
+        self.I_tau = odor_tau
+        
+        # 发放率计算参数
+        self.k_rate = k_rate
+        self.rate_sigma = rate_sigma
+        
+    def gen_sig_trace_OU(self, seed=0, smooth_T=None):
+        """生成Ornstein-Uhlenbeck过程输入信号"""
+        rng = np.random.default_rng(seed)
+        rands = rng.normal(0, 1, self.N)
+        st = np.zeros(self.N)
+        D = self.I_sigma**2*2/self.I_tau
+        for iT in range(1, self.N):
+            st[iT] = st[iT - 1]*np.exp(-1/self.I_tau*self.dt) + \
+                (D/2*self.I_tau*(1 - np.exp(-2/self.I_tau*self.dt)))**0.5*rands[iT]
+        if smooth_T is not None:
+            st = gaussian_filter(st, sigma=int(smooth_T/self.dt))
+        self.stim = st + self.I_mu
+    
+    def integrate(self):
+        """模拟神经元动力学"""
+        V = np.zeros(self.N)  # 膜电位
+        spikes = np.zeros(self.N)  # 脉冲序列
+        adaptation = np.zeros(self.N)  # 适应电流
+        
+        # 初始条件
+        V[0] = self.V_rest
+        
+        for i in range(1, self.N):
+            # LIF模型方程
+            dV = (-(V[i-1] - self.V_rest) + self.R * (self.stim[i] - adaptation[i-1])) / self.tau_m
+            V[i] = V[i-1] + dV * self.dt
+            
+            # 更新适应电流
+            d_adapt = -adaptation[i-1] / self.adaptation_tau
+            adaptation[i] = adaptation[i-1] + d_adapt * self.dt
+            
+            # 检查是否发放
+            if V[i] >= self.V_th:
+                # 发放脉冲
+                spikes[i] = 1
+                # 重置电压
+                V[i] = self.V_reset
+                # 增加适应电流
+                adaptation[i] += self.adaptation_strength
+        
+        # 保存结果
+        self.V = V
+        self.spikes = spikes
+        self.adaptation = adaptation
+    
+    def calc_rate(self, filt_len=30000):
+        """计算连续发放率"""
+        # 高斯滤波平滑脉冲序列
+        self.rate = gaussian_filter(self.spikes, sigma=1/self.k_rate/self.dt)
+        # 转换为Hz (1/ms * 1000 = Hz)
+        self.rate *= 1000 / self.dt
+        # 添加噪声
+        self.rate += np.random.normal(0, self.rate_sigma, self.N)
+    
+    def calc_avg_dose_response(self, num_stim_bins=100):
+        """计算平均剂量响应曲线"""
+        stim_bins = np.linspace(min(self.stim), max(self.stim), num_stim_bins)
+        stim_binned = np.digitize(self.stim, bins=stim_bins, right=True) - 1
+        rates_binned = [[] for _ in range(len(stim_bins))]
+        
+        dose_response_avg = []
+        dose_response_std = []
+        for iS in range(len(self.stim)):
+            rates_binned[stim_binned[iS]].append(self.rate[iS])
+        for iS in range(num_stim_bins - 1):
+            if len(rates_binned[iS]) > 100:
+                dose_response_avg.append(np.mean(rates_binned[iS]))
+                dose_response_std.append(np.std(rates_binned[iS]))
+            else:
+                dose_response_avg.append(np.nan)
+                dose_response_std.append(np.nan)
+        self.dose_response_bins = (stim_bins[1:] + stim_bins[:-1])/2.
+        self.dose_response_avg = np.array(dose_response_avg)
+        self.dose_response_std = np.array(dose_response_std)
+    
+    def calc_MI(self, stim_lims=[0, 10], num_stim_bins=200, rate_lims=[0, 200],
+                num_rate_bins=300, split_stim=None, cutout=0):
+        """计算输入与发放率之间的互信息"""
+        from utils import calc_MI_xy  # 假设有互信息计算工具函数
+        
+        stim_bins = np.linspace(stim_lims[0], stim_lims[1], num_stim_bins)
+        rate_bins = np.linspace(rate_lims[0], rate_lims[1], num_rate_bins)
+
+        rate = self.rate
+        stim = self.stim
+        rate = rate[int(cutout/self.dt):]
+        stim = stim[int(cutout/self.dt):]
+        
+        if split_stim == 'below_threshold':
+            rate = rate[stim < self.I_mu]
+            stim = stim[stim < self.I_mu]
+        elif split_stim == 'above_threshold':
+            rate = rate[stim > self.I_mu]
+            stim = stim[stim > self.I_mu]
+        
+        self.MI = calc_MI_xy(stim, stim_bins, rate, rate_bins)
+        
+        
 class NaP_K_model():
     
     def __init__(self, dt=0.1, N=1000000, odor_tau=200, odor_mu=4.53, odor_sigma=0.3, 
