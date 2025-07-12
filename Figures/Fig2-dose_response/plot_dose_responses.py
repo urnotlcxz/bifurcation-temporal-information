@@ -14,13 +14,15 @@ import numpy as np
 import pickle
 import matplotlib.pyplot as plt
 
+
+
 sys.path.append(os.path.abspath('../../models'))
 sys.path.append(os.path.abspath('../../utils'))
 
 from models import *
 from paper_utils import gen_plot, save_fig
 
-SAVEFIG = False
+SAVEFIG = True
 
 #%% SNIC - Fig 2B,C
 
